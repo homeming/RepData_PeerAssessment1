@@ -2,24 +2,108 @@
 title: "Reproducible Research: Peer Assessment 1"
 output: 
   html_document:
-    keep_md: true
+    keep_md: yes
 ---
 
+```{r global_options,echo=FALSE}
+knitr::opts_chunk$set(echo=TRUE, results="asis", warning=FALSE)
+```
 
 ## Loading and preprocessing the data
+_Note: The csv file was already extracted from the activity.zip file stored in the forked github branch_
 
+Extracting the data from activity.csv
 
+```{r}
+activity <- read.csv("activity.csv", stringsAsFactors = FALSE)
+#activity$date <- as.Date(activity$date, "%Y-%m-%d")
+```
 
 ## What is mean total number of steps taken per day?
 
+Histogram of the total number of steps each day, ignoring NA values.
+Intervals are blocks of ~2000.
 
+```{r}
+hist(with(activity, tapply(steps, date, sum)), 
+     main="Activity Monitoring Step Counts", xlab="Steps (per day)", ylab="Frequency",
+     breaks = 10)
+```
+
+Mean and median steps per day
+
+```{r}
+library(xtable)
+library(dplyr)
+steps_by_date <- activity %>% group_by(date) %>% summarise(mean=mean(steps), median=median(steps, na.rm=TRUE))
+print(xtable(steps_by_date), type="html")
+```
 
 ## What is the average daily activity pattern?
 
+Time series plot (i.e. type = "l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all days (y-axis).
 
+8:35 is the 15-minute time interval with the highest number of steps on average across all days
+
+```{r daily_pattern, results="markup"}
+avg_steps_by_interval <- activity %>% group_by(interval) %>% summarise(mean=mean(steps, na.rm=TRUE))
+plot(avg_steps_by_interval$interval, avg_steps_by_interval$mean, 
+     type="l", col="blue", main="Average Steps by Time Interval", xlab="Interval", ylab="Average Steps")
+
+with(avg_steps_by_interval, subset(avg_steps_by_interval, mean==max(mean)))
+```
 
 ## Imputing missing values
 
+There are 2304 missing values for steps in the activity dataset
+```{r missing1, results="markup"}
+summary(activity$steps)
+```
+
+Replace the NAs with the median for each day.  
+Recall from the table above, all medians are 0.  
+
+```{r}
+activity_cleaned <- activity
+activity_cleaned[is.na(activity_cleaned)] <- 0
+```
+
+Revisiting the histogram and mean/median calculations.
+You can see that the mean/median values are the same where there was previously data.
+So no additional steps have been the result of imputing the data.
+
+```{r}
+steps_by_date_cleaned <- activity_cleaned %>% group_by(date) %>% 
+        summarise(mean=mean(steps), median=median(steps, na.rm=TRUE))
+print(xtable(steps_by_date_cleaned), type="html")
+```
+
+```{r daily_pattern_cleaned, results="markup"}
+avg_steps_by_interval_cleaned <- activity_cleaned %>% group_by(interval) %>% 
+        summarise(mean=mean(steps, na.rm=TRUE))
+plot(avg_steps_by_interval_cleaned$interval, avg_steps_by_interval_cleaned$mean, 
+     type="l", col="blue", main="Average Steps by Time Interval (Cleaned)", xlab="Interval", ylab="Average Steps")
+```
 
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+Prepare the weekday and weekend data sets
+
+```{r}
+activity_cleaned$date <- as.Date(activity_cleaned$date)
+activity_cleaned$weekday<-as.numeric(format(as.Date(activity_cleaned$date),"%w"))
+activity_cleaned$weekday<-factor(activity_cleaned$weekday <= 5, 
+        levels=c("TRUE","FALSE"), labels=c("weekday","weekend"))
+
+interval_by_factor <- activity_cleaned %>% group_by(interval, weekday) %>% 
+        summarise(mean=mean(steps, na.rm=TRUE))
+```
+
+
+The difference between the weekday and the weekend is that typically there is less activity after the early morning when compared to weekends.
+
+```{r weekday_weekend, results="markup"}
+library(lattice)
+xyplot(mean ~ interval | weekday, data=interval_by_factor, layout=c(1,2), type="l")
+```
